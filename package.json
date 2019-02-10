@@ -1,0 +1,22 @@
+{
+  "name": "cucm-cdr",
+  "version": "1.0.0",
+  "description": "Parses CDR files from Cisco Unified Call Manager and inserts into database",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "CUCM",
+    "CDR",
+    "Parse"
+  ],
+  "author": "Einar Sigurðsson",
+  "email": "einars@fileice.org",
+  "license": "ISC",
+  "dependencies": {
+    "js-yaml": "^3.12.1",
+    "pg": "^7.7.1"
+  }
+}
