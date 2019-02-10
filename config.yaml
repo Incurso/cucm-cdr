@@ -1,0 +1,13 @@
+# Path to scan for CDR files
+scanPath: <path where cdr files are located>
+
+# Name of the CDR insert table
+tableName: <table name>
+
+# Database information
+database:
+  host: <hostname or ip address>
+  port: <5432 or prot number>
+  database: <database name>
+  user: <username>
+  password: <password>
