@@ -20,15 +20,18 @@ try {
 // Create pool with connection parameters
 const pool = new Pool(config.database)
 
-async function parseData (data, filePath) {
+async function parseData (data, filePath, tableType='cdr') {
+  console.log(tableType)
   let lines = data.split('\n')
   let keys = lines[0].replace(/["]/g, '').split(',')
+
+  const tableName = tableType === 'cdr' ? 'callDetailRecords' : 'callManagementRecords'
 
   // Change UNIQUEIDENTIFIER (MS SQL) to UUID (PostgreSQL)
   let types = lines[1].replace('UNIQUEIDENTIFIER', 'UUID').split(',')
 
   // Generate Create script
-  let createTable = await generateCreateScript(keys, types)
+  let createTable = await generateCreateScript(keys, types, tableName)
 
   // Remove first two lines as we have already read them
   lines.splice(0, 2)
@@ -39,19 +42,19 @@ async function parseData (data, filePath) {
   }
 
   // Generate Insert script
-  let insertInto = await generateInsercScript(keys, lines, filePath)
+  let insertInto = await generateInsertScript(keys, lines, filePath, tableName)
 
   return { create: createTable, insert: insertInto }
 }
 
-async function generateCreateScript (keys, types) {
+async function generateCreateScript (keys, types, tableName) {
   // Create table with each key in the CDR file as a value.
-  let createTable = `CREATE TABLE IF NOT EXISTS ${config.tableName} (${keys.map((key, i) => { return `${key} ${types[i]}` })});`
+  let createTable = `CREATE TABLE IF NOT EXISTS ${tableName} (${keys.map((key, i) => { return `${key} ${types[i]}` })});`
 
   return createTable
 }
 
-async function generateInsercScript (keys, lines, filePath) {
+async function generateInsertScript (keys, lines, filePath, tableName) {
   let file = path.basename(filePath)
   let values = []
 
@@ -76,7 +79,7 @@ async function generateInsercScript (keys, lines, filePath) {
   }
 
   // Generate insert into command.
-  let insertInto = `INSERT INTO ${config.tableName} (${keys}) VALUES ${values};`
+  let insertInto = `INSERT INTO ${tableName} (${keys}) VALUES ${values};`
 
   return insertInto
 }
@@ -112,11 +115,17 @@ async function archiveFile (data, filePath) {
       // Ignore directories and files with extensions
       if (fs.lstatSync(filePath).isDirectory()) continue
       if (path.extname(file) !== '') continue
+      if (!['cdr', 'cmr'].includes(file.slice(0, 3))) continue
+
+      // Set tableType
+      const tableType = file.slice(0, 3)
 
       // Read file
       let data = fs.readFileSync(filePath, 'utf8')
       // Generate SQL query
-      let queryScripts = await parseData(data, filePath)
+      let queryScripts = await parseData(data, filePath, tableType)
+
+      console.log(queryScripts)
 
       try {
         await client.query('BEGIN')
