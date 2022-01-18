@@ -82,10 +82,13 @@ async function generateInsercScript (keys, lines, filePath) {
 }
 
 async function archiveFile (data, filePath) {
+  const date = new Date()
+  const year = `${date.getFullYear()}`
+  const month = (`0${date.getMonth() + 1}`).slice(-2)
   let file = path.basename(filePath)
-  let archivePath = path.join(config.scanPath, 'archive')
+  let archivePath = path.join(config.scanPath, 'archive', year, month)
   if (!fs.existsSync(archivePath)) {
-    fs.mkdirSync(archivePath)
+    fs.mkdirSync(archivePath, { recursive: true })
   }
 
   fs.rename(filePath, path.join(archivePath, file), (err) => {
@@ -136,7 +139,7 @@ async function archiveFile (data, filePath) {
 
         console.log(`Inserted ${resInsert.rowCount} entries from ${file} Elapsed time: ${(new Date() - startTime) / 1000} seconds Total entries added: ${totalEntries}`)
       } catch (e) {
-        console.error(`Unable to insert content from file: ${file}`)
+        console.error(`Unable to insert content from file: ${file}, Error: ${e}`)
         await client.query('ROLLBACK')
 
         // TODO: alert error via email.
