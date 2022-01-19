@@ -14,21 +14,21 @@ try {
   // TODO: alert error via email.
 
   // Exit
-  process.exit(0)
+  process.exit(1)
 }
 
 // Create pool with connection parameters
 const pool = new Pool(config.database)
 
-async function parseData (data, filePath, tableType='cdr') {
-  console.log(tableType)
+async function parseData (data, filePath, tableName) {
   let lines = data.split('\n')
   let keys = lines[0].replace(/["]/g, '').split(',')
 
-  const tableName = tableType === 'cdr' ? 'callDetailRecords' : 'callManagementRecords'
-
   // Change UNIQUEIDENTIFIER (MS SQL) to UUID (PostgreSQL)
-  let types = lines[1].replace('UNIQUEIDENTIFIER', 'UUID').split(',')
+  let types = lines[1]
+    .replace('UNIQUEIDENTIFIER', 'UUID')  // Rename field to supported PostgreSQL data type
+    .replace(/INTEGER/g, 'BIGINT')        // CMR is using larger numbers than integer (int4) provides
+    .split(',')
 
   // Generate Create script
   let createTable = await generateCreateScript(keys, types, tableName)
@@ -48,7 +48,7 @@ async function parseData (data, filePath, tableType='cdr') {
 }
 
 async function generateCreateScript (keys, types, tableName) {
-  // Create table with each key in the CDR file as a value.
+  // Create table with each key in the CDR/CMR file as a value.
   let createTable = `CREATE TABLE IF NOT EXISTS ${tableName} (${keys.map((key, i) => { return `${key} ${types[i]}` })});`
 
   return createTable
@@ -58,11 +58,9 @@ async function generateInsertScript (keys, lines, filePath, tableName) {
   let file = path.basename(filePath)
   let values = []
 
-  // for (const line of lines) {
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i]
+  for (const line of lines) {
     // Replace " with ' and split on ,
-    let tmpValues = line.replace(/["]/g, '\'').split(',')
+    let tmpValues = line.replace(/["]/g, '\'').split(',').map(d => d ? d : 'null') // Set empty to null
 
     // If we have number of values equal to the number of keys push the value, else throw an error
     if (tmpValues.length === keys.length) {
@@ -74,7 +72,7 @@ async function generateInsertScript (keys, lines, filePath, tableName) {
       // TODO: alert error via email.
 
       // Exit
-      process.exit(0)
+      process.exit(1)
     }
   }
 
@@ -118,14 +116,12 @@ async function archiveFile (data, filePath) {
       if (!['cdr', 'cmr'].includes(file.slice(0, 3))) continue
 
       // Set tableType
-      const tableType = file.slice(0, 3)
+      const tableName = file.slice(0, 3) === 'cdr' ? 'callDetailRecords' : 'callManagementRecords'
 
       // Read file
       let data = fs.readFileSync(filePath, 'utf8')
       // Generate SQL query
-      let queryScripts = await parseData(data, filePath, tableType)
-
-      console.log(queryScripts)
+      let queryScripts = await parseData(data, filePath, tableName)
 
       try {
         await client.query('BEGIN')
@@ -135,7 +131,7 @@ async function archiveFile (data, filePath) {
 
         // If there is no rowCount a table was created
         if (resCreate.rowCount !== null) {
-          console.log(`Created table ${config.tableName}`)
+          console.log(`Created table ${tableName}`)
         }
 
         // Count rows inserted
@@ -148,13 +144,14 @@ async function archiveFile (data, filePath) {
 
         console.log(`Inserted ${resInsert.rowCount} entries from ${file} Elapsed time: ${(new Date() - startTime) / 1000} seconds Total entries added: ${totalEntries}`)
       } catch (e) {
-        console.error(`Unable to insert content from file: ${file}, Error: ${e}`)
+        console.error(`Unable to insert content from file: ${file}, Error: ${e.message}`)
+        console.error(queryScripts)
         await client.query('ROLLBACK')
 
         // TODO: alert error via email.
 
         // Exit
-        process.exit(0)
+        process.exit(1)
       }
     }
 
